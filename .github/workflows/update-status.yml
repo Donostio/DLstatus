@@ -1,21 +1,73 @@
-name: Secret Test Run
+name: Update Tube Status
 
 on:
+  schedule:
+    # Runs every 10 minutes
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
-  test:
+  update-data:
     runs-on: ubuntu-latest
+
+    # Permission is essential for the 'git commit' step
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Test Secret Loading
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install jq (JSON processor)
+        run: sudo apt-get install jq -y
+          
+      - name: Fetch and Update Status (with Debugging)
+        id: fetch
         run: |
           APPS_SCRIPT_URL="${{ secrets.APPS_SCRIPT_URL }}"
+          
+          # 💡 DEBUGGING START 💡
+          echo "Attempting to fetch data from URL..."
+          
+          # 1. Fetch data from your Google Apps Script
+          RESPONSE=$(curl -svL $APPS_SCRIPT_URL)
+          
+          # 💡 DEBUG: Print the RAW response to the log
+          echo "--- RAW API Response ---"
+          echo "$RESPONSE" 
+          echo "------------------------"
 
-          # This will show you exactly what the shell sees for the URL variable
-          echo "URL LENGTH: ${#APPS_SCRIPT_URL}"
+          # 2. Extract status and reason using jq
+          STATUS=$(echo $RESPONSE | jq -r '.status')
+          REASON=$(echo $RESPONSE | jq -r '.reason // ""')
 
-          # If the length is correct (check your URL length manually) and this runs, 
-          # the secret loading is fine.
+          # 💡 DEBUG: Print the PARSED variables
+          echo "Parsed Status: $STATUS"
+          echo "Parsed Reason: $REASON"
+          echo "------------------------"
+          # 💡 DEBUGGING END 💡
+
+          # 3. Create or overwrite the static JSON file
+          echo "{\"status\": \"$STATUS\", \"reason\": \"$REASON\"}" > status_data.json
+          
+          # Check if the file changed from the version currently in the repo (using modern output method)
+          if git diff --exit-code status_data.json; then
+            echo "files_changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "files_changed=true" >> $GITHUB_OUTPUT
+          fi
+        
+      - name: Commit and Push changes
+        # Only commit and push if the status actually changed
+        if: steps.fetch.outputs.files_changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add status_data.json
+          git commit -m "Automated status update via cron"
+          git push
