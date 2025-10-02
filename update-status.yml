@@ -1,0 +1,65 @@
+name: Update Tube Status
+
+# This schedule runs every 10 minutes (at :00, :10, :20, :30, :40, :50 minutes past the hour).
+on:
+  schedule:
+    # The cron string '*/10 * * * *' sets the 10-minute interval.
+    - cron: '*/10 * * * *'
+  # Allows you to manually trigger the update from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+
+    # Permission is ESSENTIAL to allow the workflow to commit the updated status_data.json file.
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install jq (JSON processor)
+        # 'jq' is necessary to parse the JSON response from your Google Apps Script.
+        run: sudo apt-get install jq -y
+          
+      - name: Fetch and Update Status (with Debugging)
+        id: fetch
+        run: |
+          # Retrieve the secret containing your deployed Apps Script URL
+          APPS_SCRIPT_URL="${{ secrets.APPS_SCRIPT_URL }}"
+          
+          # 1. Fetch data from your Google Apps Script
+          RESPONSE=$(curl -s $APPS_SCRIPT_URL)
+          
+          # 2. Extract status and reason using jq
+          # '.reason // ""' handles cases where the reason field might be null or missing
+          STATUS=$(echo $RESPONSE | jq -r '.status')
+          REASON=$(echo $RESPONSE | jq -r '.reason // ""')
+
+          # 3. Create or overwrite the static JSON file
+          echo "{\"status\": \"$STATUS\", \"reason\": \"$REASON\"}" > status_data.json
+          
+          # Check if the file changed from the version currently in the repo
+          if git diff --exit-code status_data.json; then
+            # Use the modern $GITHUB_OUTPUT syntax to set the flag
+            echo "files_changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "files_changed=true" >> $GITHUB_OUTPUT
+          fi
+        
+      - name: Commit and Push changes
+        # Only commit and push if the previous step detected a change in the status
+        if: steps.fetch.outputs.files_changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add status_data.json
+          git commit -m "Automated status update via cron"
+          git push
