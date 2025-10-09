@@ -27,26 +27,28 @@
             transform: scale(1.02);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
-        /* Custom size for the District Line logo */
+        /* District Line logo size: 20% larger than before (8.4rem -> 10.08rem) */
         .district-logo-size {
-            width: 8.4rem;
+            width: 10.08rem;
         }
 
-        /* Fix for the newline characters in the reason text */
+        /* Preserve newlines for reason text */
         #tfl-detail-text {
             white-space: pre-line;
         }
     </style>
 </head>
 <body class="bg-black text-white min-h-screen">
-    <div id="main-container" class="flex flex-col items-center justify-start min-h-screen p-4 pt-16">
+    <!-- Center everything vertically and horizontally -->
+    <div id="main-container" class="flex items-center justify-center min-h-screen p-4">
         <div class="line-section bg-black w-full max-w-sm">
             <a href="https://tfl.gov.uk/tube-dlr-overground/status/#district" target="_blank" class="line-link">
-                <img src="images/DL.png" id="district-logo" alt="District Line Roundel" class="district-logo-size mb-2 mx-auto" onerror="this.onerror=null; this.src='https://placehold.co/134x134/00298B/FFFFFF?text=Logo+missing';">
+                <img src="images/DL.png" id="district-logo" alt="District Line Roundel" class="district-logo-size mb-3 mx-auto" onerror="this.onerror=null; this.src='https://placehold.co/161x161/00298B/FFFFFF?text=Logo+missing';">
             </a>
             <div class="text-center">
                 <p id="district-status" class="text-3xl font-extrabold text-white mb-1"></p>
-                <p id="tfl-detail-text" class="text-md text-white mt-2"></p>
+                <!-- Match font, size, and color to the weather site's 'chance within 2 hrs' (text-xl, white) -->
+                <p id="tfl-detail-text" class="text-xl text-white mt-2"></p>
             </div>
         </div>
 
@@ -66,9 +68,6 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // APPS_SCRIPT_URL is no longer needed here as the page fetches a static file instead.
-            // const APPS_SCRIPT_URL = '...'; 
-
             const loadingIndicator = document.getElementById('loading');
             const errorMessage = document.getElementById('error-message');
             const districtStatus = document.getElementById('district-status');
@@ -76,35 +75,37 @@
 
             const getStatusColor = (status, reason) => {
                 const lowerStatus = status.toLowerCase();
-                const lowerReason = reason.toLowerCase();
+                const lowerReason = (reason || '').toLowerCase();
 
                 // If the reason is the generic message from the Apps Script, the status text should be red.
                 if (lowerReason.includes('your journey status is unclear') || lowerReason.includes('effect on lms journey unclear')) {
                     return 'text-red-500';
                 }
                 
-                // Check for Good Service first
+                // Good Service -> green
                 if (lowerStatus.includes('good service')) {
                     return 'text-emerald-400';
                 }
 
-                // Then check for Minor Delays (orange)
+                // Minor Delays -> orange
                 if (lowerStatus.includes('minor delays')) {
                     return 'text-orange-400';
                 }
 
-                // Then check for all red statuses, including "Planned Closure" and "Part Closure"
-                if (lowerStatus.includes('severe delays') || lowerStatus.includes('planned closure') || lowerStatus.includes('suspended') || lowerStatus.includes('no service') || lowerStatus.includes('service closed') || lowerStatus.includes('part closure')) {
+                // Red statuses
+                if (
+                    lowerStatus.includes('severe delays') || lowerStatus.includes('planned closure') ||
+                    lowerStatus.includes('suspended') || lowerStatus.includes('no service') ||
+                    lowerStatus.includes('service closed') || lowerStatus.includes('part closure')
+                ) {
                     return 'text-red-500';
                 }
                 
-                // Default to red if status is unknown or not explicitly handled
+                // Default
                 return 'text-red-500';
             };
             
-            // This function now fetches the STATIC JSON file updated by the GitHub Action.
             const fetchTubeStatus = async () => { 
-                
                 districtStatus.textContent = '';
                 districtStatus.className = 'text-3xl font-extrabold text-white mb-1';
                 tflDetailText.textContent = '';
@@ -113,45 +114,36 @@
                 errorMessage.classList.add('hidden');
 
                 try {
-                    // Fetch the static JSON file updated by the GitHub Action.
-                    // The '?t=...' is a cache-buster to ensure the browser gets the latest version from the server.
                     const response = await fetch('./status_data.json?t=' + new Date().getTime()); 
-                    
-                    if (!response.ok) {
-                        throw new Error(`Static file not found or HTTP error! status: ${response.status}`);
-                    }
+                    if (!response.ok) throw new Error(`Static file not found or HTTP error! status: ${response.status}`);
 
                     const data = await response.json();
                     
                     districtStatus.textContent = data.status;
                     districtStatus.className = `text-3xl font-extrabold mb-1 ${getStatusColor(data.status, data.reason)}`;
 
-                    if (data.status.toLowerCase().includes('good service')) {
+                    if (!data.status || data.status.toLowerCase().includes('good service')) {
                         tflDetailText.textContent = '';
                     } else {
+                        // Reason styling already matches weather site (text-xl, white)
                         tflDetailText.textContent = data.reason ?? '';
                     }
                     
                 } catch (error) {
                     console.error('Display error:', error);
-                    // Default status if the file fetch fails
                     districtStatus.textContent = 'Status Pending';
                     districtStatus.className = 'text-3xl font-extrabold mb-1 text-yellow-500';
                     tflDetailText.textContent = 'Data is loading or the GitHub Action has not run yet.';
                     errorMessage.classList.add('hidden');
                 } finally {
                     loadingIndicator.classList.add('hidden');
-                    // This is for external page rotation tools, keeping it here is safe.
                     window.parent.postMessage({ type: 'page-ready' }, '*');
                 }
             };
 
-            // 1. Initial call to display content immediately from the static file.
+            // Initial load + refresh every minute
             fetchTubeStatus(); 
-            
-            // 2. Client-side timer to re-read the static file every minute. 
-            // This ensures the status updates within a minute of the GitHub Action running.
-            setInterval(fetchTubeStatus, 60000); // 60000 milliseconds = 1 minute
+            setInterval(fetchTubeStatus, 60000);
         });
     </script>
 </body>
