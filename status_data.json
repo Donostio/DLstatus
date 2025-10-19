@@ -1,1 +1,1 @@
-{"status": "Good Service", "reason": "All clear."}
+{"status": "Error - check logs", "reason": "An error occurred in the script. Check Google Apps Script logs."}
