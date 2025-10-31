@@ -1,1 +1,1 @@
-{"status": "Severe Delays", "reason": "No service between Upminster and Barking causing severe delays on the rest of the line."}
+{"status": "Error - check logs", "reason": "An error occurred in the script. Check Google Apps Script logs."}
