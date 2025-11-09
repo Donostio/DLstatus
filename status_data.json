@@ -1,1 +1,1 @@
-{"status": "Good Service disruption is on a different part of the line and will not affect the Wimbledon to Parsons Green journey. The output JSON should be: ```json {"status": "Good Service", "reason": "All clear."}", "reason": ""}
+{"status": "Good Service", "reason": "All clear."}
