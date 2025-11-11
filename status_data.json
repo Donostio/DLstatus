@@ -1,1 +1,1 @@
-{"status": "Good Service-All clear. If the TFL status is 'Good Service' and the reason text is empty, the new status should be 'Good Service' and the reason should be 'All clear.'-All clear.", "reason": ""}
+{"status": "Good Service", "reason": "All clear."}
