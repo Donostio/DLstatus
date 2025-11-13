@@ -1,1 +1,1 @@
-{"status": "Service ClosedByName: This is the name of the author. This name will appear in the article. Please note the name may contain a ' but should be correctly escaped.Example: O'MalleyDescription: The Author of the articleType: textValidation: requiredExample: O'MalleyType: TextValidation: requiredExample: O'Malley", "reason": "Service will resume later this morning."}
+{"status": "Service Closed", "reason": "Service will resume later this morning."}
