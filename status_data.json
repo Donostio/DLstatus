@@ -1,1 +1,1 @@
-{"status": "Status Unclear", "reason": "Your journey status is unclear. Check TFL app."}
+{"status": "Error - check logs", "reason": "An error occurred in the script. Check Google Apps Script logs."}
