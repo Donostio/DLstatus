@@ -5,7 +5,6 @@ on:
     - cron: '*/10 * * * *'
   workflow_dispatch:
 
-# Prevent overlapping runs fighting to push to main
 concurrency:
   group: update-tube-status
   cancel-in-progress: true
@@ -20,9 +19,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # required for pull --rebase
+          fetch-depth: 0
 
-      - name: Install jq (JSON processor)
+      # 🔹 Pull FIRST, before any file changes
+      - name: Sync with latest main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com]"
+          git pull --rebase origin main
+
+      - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Fetch and Update Status
@@ -32,7 +38,6 @@ jobs:
 
           APPS_SCRIPT_URL="${{ secrets.APPS_SCRIPT_URL }}"
 
-          # cache-bust so we always hit GAS fresh
           RESPONSE="$(curl -sSL "${APPS_SCRIPT_URL}?t=$(date +%s)")"
 
           STATUS="$(echo "$RESPONSE" | jq -r '.status // empty')"
@@ -44,7 +49,6 @@ jobs:
             exit 1
           fi
 
-          # Write JSON safely (escapes quotes/newlines properly)
           jq -n --arg status "$STATUS" --arg reason "$REASON" \
             '{status:$status, reason:$reason}' > status_data.json
 
@@ -58,13 +62,8 @@ jobs:
         if: steps.fetch.outputs.files_changed == 'true'
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Get latest main before committing (avoids non-fast-forward)
-          git pull --rebase origin main
-
           git add status_data.json
           git commit -m "Automated status update via cron"
           git push origin HEAD:main
+
 
