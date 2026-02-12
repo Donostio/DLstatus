@@ -1,1 +1,4 @@
-{"status": "Service Closed", "reason": "Service will resume later this morning."}
+{
+  "status": "Good Service",
+  "reason": "All clear."
+}
