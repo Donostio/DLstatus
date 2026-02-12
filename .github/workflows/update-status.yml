@@ -21,49 +21,139 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 🔹 Pull FIRST, before any file changes
-      - name: Sync with latest main
+      - name: Debug - repo state after checkout
         run: |
+          set -euxo pipefail
+          echo "==== GIT VERSION ===="
+          git --version
+          echo "==== WHERE AM I ===="
+          pwd
+          ls -la
+          echo "==== BRANCH / HEAD ===="
+          git rev-parse --abbrev-ref HEAD
+          git rev-parse HEAD
+          echo "==== LAST 5 COMMITS ===="
+          git --no-pager log -5 --oneline
+          echo "==== STATUS ===="
+          git status --porcelain=v1
+          git status
+
+      - name: Configure git identity
+        run: |
+          set -euxo pipefail
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync with latest main (with diagnostics)
+        run: |
+          set -euxo pipefail
+          echo "==== REMOTES ===="
+          git remote -v
+          echo "==== FETCH ===="
+          git fetch origin main
+          echo "==== STATUS BEFORE REBASE ===="
+          git status --porcelain=v1 || true
+
+          # If dirty (shouldn't be), print diff and reset so rebase can proceed.
+          if [ -n "$(git status --porcelain=v1)" ]; then
+            echo "==== WARNING: working tree dirty before pull --rebase ===="
+            git status
+            echo "==== DIFF (first 400 lines) ===="
+            git --no-pager diff | sed -n '1,400p' || true
+            echo "==== HARD RESET to HEAD to unblock rebase ===="
+            git reset --hard HEAD
+          fi
+
+          echo "==== PULL --REBASE ===="
           git pull --rebase origin main
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+          echo "==== STATUS AFTER REBASE ===="
+          git status --porcelain=v1 || true
+          git --no-pager log -5 --oneline
 
-      - name: Fetch and Update Status
+      - name: Install jq
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Fetch GAS JSON and write status_data.json (with full logging)
         id: fetch
         run: |
-          set -euo pipefail
+          set -euxo pipefail
 
-          APPS_SCRIPT_URL="${{ secrets.APPS_SCRIPT_URL }}"
-
-          RESPONSE="$(curl -sSL "${APPS_SCRIPT_URL}?t=$(date +%s)")"
-
-          STATUS="$(echo "$RESPONSE" | jq -r '.status // empty')"
-          REASON="$(echo "$RESPONSE" | jq -r '.reason // ""')"
-
-          if [ -z "$STATUS" ]; then
-            echo "GAS response missing .status. Full response:"
-            echo "$RESPONSE"
+          if [ -z "${{ secrets.APPS_SCRIPT_URL }}" ]; then
+            echo "ERROR: secrets.APPS_SCRIPT_URL is empty"
             exit 1
           fi
 
+          APPS_SCRIPT_URL="${{ secrets.APPS_SCRIPT_URL }}"
+          URL="${APPS_SCRIPT_URL}?t=$(date +%s)"
+
+          echo "==== CURL URL ===="
+          echo "$URL"
+
+          echo "==== CURL RESPONSE HEADERS ===="
+          curl -sSIL "$URL" || true
+
+          echo "==== CURL BODY ===="
+          RESPONSE="$(curl -sSL "$URL")"
+          echo "$RESPONSE"
+
+          echo "==== PARSE ===="
+          STATUS="$(echo "$RESPONSE" | jq -r '.status // empty')"
+          REASON="$(echo "$RESPONSE" | jq -r '.reason // ""')"
+          TS="$(echo "$RESPONSE" | jq -r '.timestamp // ""' 2>/dev/null || true)"
+          LN="$(echo "$RESPONSE" | jq -r '.lineName // ""' 2>/dev/null || true)"
+
+          echo "Parsed status: [$STATUS]"
+          echo "Parsed reason: [$REASON]"
+          echo "Parsed timestamp: [$TS]"
+          echo "Parsed lineName: [$LN]"
+
+          if [ -z "$STATUS" ]; then
+            echo "ERROR: GAS response missing .status. Exiting."
+            exit 1
+          fi
+
+          echo "==== WRITE status_data.json ===="
           jq -n --arg status "$STATUS" --arg reason "$REASON" \
             '{status:$status, reason:$reason}' > status_data.json
 
+          echo "==== FILE CONTENT ===="
+          cat status_data.json
+
+          echo "==== DIFF AFTER WRITE ===="
+          git --no-pager diff -- status_data.json || true
+
           if git diff --exit-code status_data.json; then
             echo "files_changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes to commit."
           else
             echo "files_changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected."
           fi
 
-      - name: Commit and Push changes
+      - name: Commit (with logging)
         if: steps.fetch.outputs.files_changed == 'true'
         run: |
-          set -euo pipefail
+          set -euxo pipefail
+          echo "==== STATUS BEFORE COMMIT ===="
+          git status --porcelain=v1
           git add status_data.json
+          echo "==== STAGED DIFF ===="
+          git --no-pager diff --cached -- status_data.json || true
           git commit -m "Automated status update via cron"
+          echo "==== COMMIT CREATED ===="
+          git --no-pager log -1 --oneline
+
+      - name: Push (with logging)
+        if: steps.fetch.outputs.files_changed == 'true'
+        run: |
+          set -euxo pipefail
+          echo "==== PUSH ===="
           git push origin HEAD:main
+          echo "==== PUSH DONE ===="
+
 
 
