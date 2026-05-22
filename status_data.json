@@ -1,4 +1,4 @@
 {
-  "status": "No Service",
-  "reason": "No Service between Wimbledon and Wimbledon Park, and MINOR DELAYS between Earl's Court and Wimbledon Park due to we fix a signal failure at Wimbledon Park"
+  "status": "Minor Delays",
+  "reason": "Minor Delays between Earl's Court and Wimbledon due to an earlier signal failure at Wimbledon Park, and MINOR DELAYS between Barking and Upminster due to an earlier points failure at Upminster"
 }
